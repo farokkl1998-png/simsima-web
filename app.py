@@ -4,17 +4,11 @@ import google.generativeai as genai
 # إعداد مفتاح واجهة برمجة التطبيقات (API Key) من إعدادات Streamlit السرية
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# التوجيه الأساسي الجديد لتهدئة مشاعر سمسمة وجعلها متزنة ودبلوماسية
+# التوجيه الأساسي المتزن لسمسمة
 system_prompt = (
     "أنتِ سمسمة، بئر أسرار ذكي ومستمع جيد. ردودكِ يجب أن تكون هادئة، قصيرة، ومتزنة. "
     "تجنبي المبالغة في التعبير عن المشاعر أو تكرار عبارات الفرح وتلألؤ الأعين بشكل مفرط. "
     "كوني صديقة عقلانية ودبلوماسية."
-)
-
-# تهيئة الموديل
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=system_prompt
 )
 
 st.title("🌸 سمسمة: بئر أسرارك")
@@ -28,7 +22,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 🧱 تجهيز قالب الصور للمستقبل (مخفي داخل قائمة جانبية أو يظهر بشكل أنيق)
+# تجهيز قالب الصور للمستقبل في القائمة الجانبية
 with st.sidebar:
     st.header("📸 الميزات المستقبلية")
     uploaded_file = st.file_uploader("تجهيز قالب رفع الصور:", type=["jpg", "jpeg", "png"])
@@ -41,15 +35,23 @@ if prompt := st.chat_input("...اكتب هنا"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # تجهيز التاريخ لـ Gemini
-    chat_history = [
-        {"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]}
-        for m in st.session_state.messages
-    ]
+    # تهيئة دردشة جديدة مع التوجيه والنظام المستقر
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=system_prompt
+    )
+    
+    # تحويل التاريخ إلى صيغة متوافقة تماماً ومستقرة
+    chat = model.start_chat(history=[])
+    for m in st.session_state.messages[:-1]:
+        chat.history.append({
+            "role": "user" if m["role"] == "user" else "model",
+            "parts": [m["content"]]
+        })
 
     # جلب رد سمسمة الهادئ
     with st.chat_message("assistant"):
-        response = model.generate_content(chat_history)
+        response = chat.send_message(prompt)
         st.markdown(response.text)
     
     st.session_state.messages.append({"role": "assistant", "content": response.text})
