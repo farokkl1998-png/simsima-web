@@ -35,23 +35,24 @@ if prompt := st.chat_input("...اكتب هنا"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # تهيئة دردشة جديدة مع التوجيه والنظام المستقر
+    # بناء السياق بالكامل بشكل نصي مستقر لتفادي أخطاء المكتبة
+    full_prompt = ""
+    for m in st.session_state.messages:
+        if m["role"] == "user":
+            full_prompt += f"المستخدم: {m['content']}\n"
+        else:
+            full_prompt += f"سمسمة: {m['content']}\n"
+    full_prompt += "سمسمة:"
+
+    # تهيئة الموديل بشكل مباشر
     model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
         system_instruction=system_prompt
     )
-    
-    # تحويل التاريخ إلى صيغة متوافقة تماماً ومستقرة
-    chat = model.start_chat(history=[])
-    for m in st.session_state.messages[:-1]:
-        chat.history.append({
-            "role": "user" if m["role"] == "user" else "model",
-            "parts": [m["content"]]
-        })
 
     # جلب رد سمسمة الهادئ
     with st.chat_message("assistant"):
-        response = chat.send_message(prompt)
+        response = model.generate_content(full_prompt)
         st.markdown(response.text)
     
     st.session_state.messages.append({"role": "assistant", "content": response.text})
