@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
-import urllib3
 import base64
+import urllib3
 
+# إيقاف تحذيرات الاتصال غير الآمن
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # إعدادات الصفحة
@@ -11,84 +12,83 @@ st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="�
 st.markdown("""
 <style>
 div[data-testid="stChatMessage"] { text-align: right; direction: rtl; }
-div[data-testid="stChatMessage"] p { font-size: 18px; font-family: 'Amiri', serif; }
-h1 { text-align: center; color: #FF4081; font-family: 'Amiri', serif; }
+h1 { text-align: center; color: #FF4081; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🌸 سمسمة: صديقة أحلام")
 
-# الروابط والمفاتيح
-API_KEY = st.secrets["GROQ_API_KEY"]
+# إعداد الـ API
+if "GROQ_API_KEY" in st.secrets:
+    API_KEY = st.secrets["GROQ_API_KEY"]
+else:
+    st.error("مفتاح API غير موجود في الإعدادات!")
+    st.stop()
+
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-SYSTEM_INSTRUCTION = {
-    "role": "system",
-    "content": "أنتِ سمسمة، الصديقة المقربة لـ 'أحلام'. ردودكِ بسيطة، هادئة، ومختصرة. خاطبي 'أحلام' باسمها. إذا أُرسلت لك صورة، صفيها بدقة وذكاء. كوني صديقة عقلانية ومتزنة."
-}
-
+# تهيئة المحادثة
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض المحادثة
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-def get_ai_response(user_input, image_base64=None):
+# وظيفة الاتصال بـ API
+def get_ai_response(current_messages):
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
 
-    # تجهيز محتوى الرسالة (يدعم النص أو النص مع الصورة)
-    content = [{"type": "text", "text": user_input}]
-    if image_base64:
-        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
-
-    context = [SYSTEM_INSTRUCTION] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[-10:]]
-    
-    # تحديث الرسالة الأخيرة لتشمل المحتوى (نص + صورة)
-    context[-1]["content"] = content
-
     payload = {
         "model": "llama-3.2-11b-vision-preview",
-        "messages": context,
+        "messages": [
+            {"role": "system", "content": "أنتِ سمسمة، الصديقة المقربة لـ 'أحلام'. ردودكِ مختصرة وذكية. إذا رأيتِ صورة صفيها."}
+        ] + current_messages,
         "temperature": 0.5
     }
 
     try:
-        r = requests.post(GROQ_URL, headers=headers, json=payload, verify=False, timeout=20)
-        if r.status_code == 200:
-            return r.json()['choices'][0]['message']['content'].strip()
-        return f"خطأ: {r.status_code}"
-    except:
-        return "مشكلة في الاتصال، حاولي مجدداً يا أحلام."
+        response = requests.post(GROQ_URL, headers=headers, json=payload, verify=False, timeout=30)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content']
+        else:
+            return f"خطأ ({response.status_code}): {response.text}"
+    except Exception as e:
+        return f"خطأ في الاتصال: {str(e)}"
 
-# واجهة المدخلات
-uploaded_file = st.file_uploader("اختاري صورة لترها سمسمة...", type=["jpg", "png", "jpeg"])
-user_query = st.chat_input("اكتبي لسمسمة يا أحلام...")
+# عرض الرسائل السابقة
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-if user_query:
-    image_base64 = None
+# واجهة المستخدم
+uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "jpeg", "png"])
+user_text = st.chat_input("اكتبي لسمسمة...")
+
+if user_text:
+    # تجهيز محتوى الرسالة
+    message_content = [{"type": "text", "text": user_text}]
+    
     if uploaded_file:
-        image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+        image_data = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+        message_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
+        })
+        # عرض الصورة في الشات
         with st.chat_message("user"):
-            st.image(uploaded_file, caption="صورتك")
-            st.markdown(user_query)
+            st.image(uploaded_file)
+            st.markdown(user_text)
     else:
         with st.chat_message("user"):
-            st.markdown(user_query)
-    
-    st.session_state.messages.append({"role": "user", "content": user_query})
+            st.markdown(user_text)
 
+    # إضافة الرسالة الحالية
+    st.session_state.messages.append({"role": "user", "content": message_content})
+
+    # الحصول على رد الذكاء الاصطناعي
     with st.chat_message("assistant"):
-        with st.spinner("سمسمة تتأمل الصورة وتفكر..."):
-            response = get_ai_response(user_query, image_base64)
-            st.markdown(response)
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
-
-if st.sidebar.button("تصفير المحادثة"):
-    st.session_state.messages = []
-    st.rerun()
+        with st.spinner("سمسمة تفكر..."):
+            ai_response = get_ai_response(st.session_state.messages[-5:]) # إرسال آخر 5 رسائل فقط لتوفير الذاكرة
+            st.markdown(ai_response)
+    
+    st.session_state.messages.append({"role": "assistant", "content": ai_response})
