@@ -38,8 +38,9 @@ def get_ai_response(current_messages):
         "Content-Type": "application/json"
     }
 
+    # النموذج المحدث المدعوم حالياً
     payload = {
-        "model": "llama-3.2-11b-vision-preview",
+        "model": "llama-3.2-90b-vision-preview",
         "messages": [
             {"role": "system", "content": "أنتِ سمسمة، الصديقة المقربة لـ 'أحلام'. ردودكِ مختصرة وذكية. إذا رأيتِ صورة صفيها."}
         ] + current_messages,
@@ -58,7 +59,7 @@ def get_ai_response(current_messages):
 # عرض الرسائل السابقة
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        st.markdown(msg["content"] if isinstance(msg["content"], str) else "صورة مرفقة")
 
 # واجهة المستخدم
 uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "jpeg", "png"])
@@ -88,7 +89,7 @@ if user_text:
     # الحصول على رد الذكاء الاصطناعي
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر..."):
-            ai_response = get_ai_response(st.session_state.messages[-5:]) # إرسال آخر 5 رسائل فقط لتوفير الذاكرة
+            ai_response = get_ai_response(st.session_state.messages[-5:])
             st.markdown(ai_response)
     
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
