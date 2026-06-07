@@ -31,29 +31,6 @@ def generate_image_cloud(prompt):
         pass
     return None
 
-# دالة مخصصة لبناء مصفوفة الرسائل الموجهة لسيرفر كروك لضمان عمل الرؤية ومنع الأخطاء الفراغية
-def build_payload_messages(history, system_prompt):
-    final_payload = []
-    for i, msg in enumerate(history):
-        if isinstance(msg["content"], str) and msg["content"].startswith("IMAGE_BYTES:"):
-            continue
-        
-        if isinstance(msg["content"], list):
-            if i == 0 and msg["role"] == "user":
-                injected = []
-                for item in msg["content"]:
-                    if item["type"] == "text":
-                        injected.append({"type": "text", "text": system_prompt + item["text"]})
-                    else:
-                        injected.append(item)
-                final_payload.append({"role": msg["role"], "content": injected})
-            else:
-                final_payload.append({"role": msg["role"], "content": msg["content"]})
-        else:
-            text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
-            final_payload.append({"role": msg["role"], "content": [{"type": "text", "text": text_val}]})
-    return final_payload
-
 # 3. إدارة جلسة الذاكرة المؤقتة وتاريخ المحادثة
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -100,7 +77,23 @@ with tab1:
             with st.spinner("سمسمة تفكر..."):
                 try:
                     sys_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
-                    payload_msgs = build_payload_messages(st.session_state.messages, sys_prompt)
+                    
+                    # بناء سريع ومسطح ومحمي كلياً من أخطاء المسافات لتاريخ رسائل كروك
+                    payload_msgs = []
+                    for i, m in enumerate(st.session_state.messages):
+                        if isinstance(m["content"], str) and m["content"].startswith("IMAGE_BYTES:"):
+                            continue
+                        
+                        if isinstance(m["content"], list):
+                            payload_msgs.append({"role": m["role"], "content": m["content"]})
+                        else:
+                            payload_msgs.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
+                    
+                    # حقن شخصية سمسمة بأمان في الرسالة الأخيرة
+                    if payload_msgs and payload_msgs[-1]["role"] == "user":
+                        for item in payload_msgs[-1]["content"]:
+                            if item["type"] == "text":
+                                item["text"] = sys_prompt + item["text"]
 
                     chat_completion = client.chat.completions.create(
                         model="meta-llama/llama-4-scout-17b-16e-instruct", 
@@ -108,64 +101,10 @@ with tab1:
                         temperature=0.5
                     )
                     
-                    response = chat_completion.choices[0].message.content
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
-
-with tab2:
-    with st.form(key="drawing_form", clear_on_submit=True):
-        draw_query = st.text_input("ماذا تريدين أن أرسم لكِ يا أحلام؟ 🌸", placeholder="مثال: فتاة صغيرة تمسك قطة...")
-        submit_button = st.form_submit_button(label="اضغطي هنا للرسم ✨")
-        
-        if submit_button and draw_query:
-            with st.chat_message("user"):
-                st.markdown(f"🎨 طلب رسم: {draw_query}")
-            st.session_state.messages.append({"role": "user", "content": f"🎨 طلب رسم: {draw_query}"})
-
-            with st.chat_message("assistant"):
-                with st.spinner("سمسمة تمسك الألوان وترسم لكِ الآن... 🎨"):
-                    try:
-                        translation_completion = client.chat.completions.create(
-                            model="meta-llama/llama-4-scout-17b-16e-instruct",
-                            messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
-                            temperature=0.3
-                        )
-                        english_prompt = translation_completion.choices[0].message.content
-                    except Exception:
-                        english_prompt = draw_query
-
-                    image_bytes = generate_image_cloud(english_prompt)
-                    
-                    if image_bytes:
-                        image = Image.open(io.BytesIO(image_bytes))
-                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
-                        
-                        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
-                        st.session_state.messages.append({"role": "assistant", "content": f"IMAGE_BYTES:{img_base64}"})
-                        st.rerun()
-                    else:
-                        st.error("⚠️ عذراً يا أحلام، يبدو أن سيرفر الرسم مشغول حالياً، حاولي مجدداً بعد ثوانٍ.")
-                        else:
-                            text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
-                            final_payload_messages.append({
-                                "role": msg["role"],
-                                "content": [{"type": "text", "text": text_val}]
-                            })
-
-                    chat_completion = client.chat.completions.create(
-                        model="meta-llama/llama-4-scout-17b-16e-instruct", 
-                        messages=final_payload_messages,
-                        temperature=0.5
-                    )
-                    
                     response = chat_completion.choices.message.content
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
 
@@ -191,121 +130,6 @@ with tab2:
                     except Exception:
                         english_prompt = draw_query
 
-                    image_bytes = generate_image_cloud(english_prompt)
-                    
-                    if image_bytes:
-                        image = Image.open(io.BytesIO(image_bytes))
-                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
-                        
-                        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
-                        st.session_state.messages.append({"role": "assistant", "content": f"IMAGE_BYTES:{img_base64}"})
-                        st.rerun()
-                    else:
-                        st.error("⚠️ عذراً يا أحلام، يبدو أن سيرفر الرسم مشغول حالياً، حاولي مجدداً بعد ثوانٍ.")
-                                    else:
-                                        injected.append(item)
-                                final_payload_messages.append({"role": msg["role"], "content": injected})
-                            else:
-                                final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
-                        else:
-                            text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
-                            final_payload_messages.append({
-                                "role": msg["role"],
-                                "content": [{"type": "text", "text": text_val}]
-                            })
-
-                    chat_completion = client.chat.completions.create(
-                        model="meta-llama/llama-4-scout-17b-16e-instruct", 
-                        messages=final_payload_messages,
-                        temperature=0.5
-                    )
-                    
-                    response = chat_completion.choices[0].message.content
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
-
-with tab2:
-    # استخدام استمارة Form لإجبار المتصفح والهاتف على إرسال بيانات الرسم عند الضغط على الزر
-    with st.form(key="drawing_form", clear_on_submit=True):
-        draw_query = st.text_input("ماذا تريدين أن أرسم لكِ يا أحلام؟ 🌸", placeholder="مثال: فتاة صغيرة تمسك قطة...")
-        submit_button = st.form_submit_button(label="اضغطي هنا للرسم ✨")
-        
-        if submit_button and draw_query:
-            with st.chat_message("user"):
-                st.markdown(f"🎨 طلب رسم: {draw_query}")
-            st.session_state.messages.append({"role": "user", "content": f"🎨 طلب رسم: {draw_query}"})
-
-            with st.chat_message("assistant"):
-                with st.spinner("سمسمة تمسك الألوان وترسم لكِ الآن... 🎨"):
-                    try:
-                        # ترجمة وتحسين الطلب عبر كروك للحصول على أدق تفاصيل فنية لنموذج الرسام
-                        translation_completion = client.chat.completions.create(
-                            model="meta-llama/llama-4-scout-17b-16e-instruct",
-                            messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
-                            temperature=0.3
-                        )
-                        english_prompt = translation_completion.choices[0].message.content
-                    except Exception:
-                        english_prompt = draw_query
-
-                    # استدعاء المحرك الجديد السريع مباشرة
-                    image_bytes = generate_image_cloud(english_prompt)
-                    
-                    if image_bytes:
-                        image = Image.open(io.BytesIO(image_bytes))
-                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
-                        
-                        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
-                        st.session_state.messages.append({"role": "assistant", "content": f"IMAGE_BYTES:{img_base64}"})
-                        st.rerun()
-                    else:
-                        st.error("⚠️ عذراً يا أحلام، يبدو أن سيرفر الرسم مشغول حالياً، حاولي مجدداً بعد ثوانٍ.")
-                            final_payload_messages.append({
-                                "role": msg["role"],
-                                "content": [{"type": "text", "text": text_val}]
-                            })
-
-                    chat_completion = client.chat.completions.create(
-                        model="meta-llama/llama-4-scout-17b-16e-instruct", 
-                        messages=final_payload_messages,
-                        temperature=0.5
-                    )
-                    
-                    response = chat_completion.choices[0].message.content
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
-
-with tab2:
-    # صندوق الرسم واضح ومباشر في الواجهة الرئيسية على الهاتف
-    draw_query = st.text_input("ماذا تريدين أن أرسم لكِ يا أحلام؟ 🌸", key="draw_box_input", placeholder="مثال: فتاة صغيرة تمسك قطة...")
-    if st.button("اضغطي هنا للرسم ✨"):
-        if draw_query:
-            with st.chat_message("user"):
-                st.markdown(f"🎨 طلب رسم: {draw_query}")
-            st.session_state.messages.append({"role": "user", "content": f"🎨 طلب رسم: {draw_query}"})
-
-            with st.chat_message("assistant"):
-                with st.spinner("سمسمة تمسك الألوان وترسم لكِ الآن... 🎨"):
-                    try:
-                        # ترجمة وتحسين الطلب عبر كروك للحصول على أدق تفاصيل فنية لنموذج الرسام
-                        translation_completion = client.chat.completions.create(
-                            model="meta-llama/llama-4-scout-17b-16e-instruct",
-                            messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
-                            temperature=0.3
-                        )
-                        english_prompt = translation_completion.choices[0].message.content
-                    except Exception:
-                        english_prompt = draw_query
-
-                    # استدعاء المحرك الجديد السريع مباشرة
                     image_bytes = generate_image_cloud(english_prompt)
                     
                     if image_bytes:
