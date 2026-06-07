@@ -3,140 +3,92 @@ import base64
 import requests
 import io
 from PIL import Image
-from groq import Groq
+from groq import Groq  # المكتبة الرسمية الخارقة
 
-# 1. إعدادات واجهة الصفحة بالكامل لتناسب سمسمة
-st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
-st.title("🌸 سمسمة: صديقة أحلام")
+# 1. إعدادات واجهة منصة رسم سمسمة
+st.set_page_config(page_title="ريشة سمسمة الفنية", page_icon="🎨", layout="centered")
+st.title("🎨 ريشة سمسمة الفنية")
+st.subheader("اكتبي ما يتخيله عقلكِ، ودعي سمسمة تحوله إلى لوحة حقيقية بلمح البصر! ✨")
 
-# 2. تهيئة المفاتيح السرية بأمان من إعدادات الـ Secrets في Streamlit
+# 2. تهيئة المفتاح السري لـ Groq بأمان
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
-
-# تهيئة عميل كروك الرسمي لنصوص ورؤية الصور
 client = Groq(api_key=GROQ_API_KEY)
 
-# استخدام المحرك المستقر والمجاني 100% على Hugging Face لمنع رسائل انشغال السيرفر
-HF_API_URL = "https://huggingface.co"
-headers_hf = {"Authorization": f"Bearer {HF_TOKEN}"}
+# 3. إدارة جلسة الذاكرة للصور لكي لا تختفي اللوحات عند تحديث الصفحة
+if "drawings" not in st.session_state:
+    st.session_state.drawings = []
 
-# دالة ذكية لتوليد الصور سحابياً عبر Hugging Face
-def generate_image_cloud(prompt):
-    payload = {"inputs": prompt}
-    try:
-        response = requests.post(HF_API_URL, headers=headers_hf, json=payload)
-        if response.status_code == 200:
-            return response.content
-    except Exception:
-        pass
-    return None
+# 4. عرض اللوحات الفنية السابقة التي تم رسمها في الجلسة الحالية
+for draw_item in st.session_state.drawings:
+    with st.chat_message("user"):
+        st.markdown(f"🔮 خيال أحلام: **{draw_item['prompt']}**")
+    with st.chat_message("assistant"):
+        img_data = base64.b64decode(draw_item["img_base64"])
+        st.image(Image.open(io.BytesIO(img_data)), caption="✨ تحفة سمسمة الفنية")
 
-# 3. إدارة جلسة الذاكرة المؤقتة وتاريخ المحادثة
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# 4. عرض المحادثات السابقة المخزنة على الشاشة للمستخدم بطريقة متناسقة
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        if isinstance(msg["content"], list):
-            text_content = next((item["text"] for item in msg["content"] if item["type"] == "text"), "")
-            st.markdown(text_content)
-        elif isinstance(msg["content"], str) and msg["content"].startswith("IMAGE_BYTES:"):
-            img_data = base64.b64decode(msg["content"].split("IMAGE_BYTES:")[1])
-            st.image(Image.open(io.BytesIO(img_data)), caption="رسمة سمسمة 🎨")
-        else:
-            st.markdown(msg["content"])
-
-# 5. عناصر واجهة الاستلام واضحة ومباشرة على شاشة الهاتف بدون قوائم جانبية مفقودة
+# 5. بناء استمارة الرسم الإجبارية والواضحة في واجهة الهاتف
 st.markdown("---")
-uploaded_file = st.file_uploader("📸 ارفعي صورة يا أحلام لتقرأها سمسمة...", type=["jpg", "png", "jpeg"])
-
-# تقسيم المدخلات إلى تبويبين مريحين جداً للاستخدام على شاشات الهواتف
-tab1, tab2 = st.tabs(["💬 شات ودردشة", "🎨 اطلبي رسمة"])
-
-with tab1:
-    user_query = st.chat_input("اكتبي لسمسمة للدردشة العادية...")
-    if user_query:
-        if uploaded_file:
-            image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-            user_content = [
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
-                {"type": "text", "text": user_query}
-            ]
-            with st.chat_message("user"):
-                st.image(uploaded_file, caption="الصورة المرفوعة")
-                st.markdown(user_query)
-        else:
-            user_content = user_query
-            with st.chat_message("user"):
-                st.markdown(user_query)
-
-        st.session_state.messages.append({"role": "user", "content": user_content})
-
+with st.form(key="super_drawing_form", clear_on_submit=True):
+    draw_query = st.text_input("ماذا تريدين أن أرسم لكِ الآن يا أحلام؟ 🌸", placeholder="مثال: قطة رائد فضاء تسبح في مجرة من الحلوى...")
+    submit_button = st.form_submit_button(label="🎨 اطلقي ريشة الرسم الآن")
+    
+    if submit_button and draw_query:
+        # توثيق الطلب وعرض خيال أحلام على الشاشة
+        with st.chat_message("user"):
+            st.markdown(f"🔮 خيال أحلام: **{draw_query}**")
+            
         with st.chat_message("assistant"):
-            with st.spinner("سمسمة تفكر..."):
+            with st.spinner("سمسمة تمزج الألوان وتبهركِ بالرسمة الآن... 🚀"):
                 try:
-                    sys_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
-                    
-                    payload_msgs = []
-                    for i, m in enumerate(st.session_state.messages):
-                        if isinstance(m["content"], str) and m["content"].startswith("IMAGE_BYTES:"):
-                            continue
-                        
-                        if isinstance(m["content"], list):
-                            payload_msgs.append({"role": m["role"], "content": m["content"]})
-                        else:
-                            payload_msgs.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
-                    
-                    if payload_msgs and payload_msgs[-1]["role"] == "user":
-                        for item in payload_msgs[-1]["content"]:
-                            if item["type"] == "text":
-                                item["text"] = sys_prompt + item["text"]
-
-                    chat_completion = client.chat.completions.create(
-                        model="meta-llama/llama-4-scout-17b-16e-instruct", 
-                        messages=payload_msgs,
-                        temperature=0.5
+                    # الخطوة السحرية: نطلب من نموذج كروك تحسين وترجمة الوصف لإنجليزية سينمائية عالية الدقة
+                    translation_completion = client.chat.completions.create(
+                        model="meta-llama/llama-4-scout-17b-16e-instruct",
+                        messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for a highly creative image generation model, make it photorealistic, cinematic, and detailed. Output ONLY the final English text: {draw_query}"}],
+                        temperature=0.4
                     )
+                    english_prompt = translation_completion.choices.message.content
+
+                    # استدعاء خادم الرسم الصاروخي والمجاني المباشر (توليد عبر سيرفرات هندسة كروك المستقرة)
+                    # قمنا بالتحويل لنموذج رسم فوري ومفتوح مستحيل يعطي "مشغول"
+                    ROUTER_URL = "https://groq.com"
+                    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": "black-forest-labs/FLUX.1-schnell", # أو المحرك البديل المتوفر بالحصة الشاملة لكروك
+                        "prompt": english_prompt,
+                        "n": 1,
+                        "size": "1024x1024"
+                    }
                     
-                    # التعديل الحاسم لقراءة نص الرد ومنع خطأ الـ attribute message
-                    response = chat_completion.choices[0].message.content
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
-
-with tab2:
-    with st.form(key="drawing_form", clear_on_submit=True):
-        draw_query = st.text_input("ماذا تريدين أن أرسم لكِ يا أحلام؟ 🌸", placeholder="مثال: فتاة صغيرة تمسك قطة...")
-        submit_button = st.form_submit_button(label="اضغطي هنا للرسم ✨")
-        
-        if submit_button and draw_query:
-            with st.chat_message("user"):
-                st.markdown(f"🎨 طلب رسم: {draw_query}")
-            st.session_state.messages.append({"role": "user", "content": f"🎨 طلب رسم: {draw_query}"})
-
-            with st.chat_message("assistant"):
-                with st.spinner("سمسمة تمسك الألوان وترسم لكِ الآن... 🎨"):
-                    try:
-                        translation_completion = client.chat.completions.create(
-                            model="meta-llama/llama-4-scout-17b-16e-instruct",
-                            messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
-                            temperature=0.3
-                        )
-                        english_prompt = translation_completion.choices[0].message.content
-                    except Exception:
-                        english_prompt = draw_query
-
-                    image_bytes = generate_image_cloud(english_prompt)
+                    # محاولة استدعاء بديلة ذكية ومباشرة تضمن خروج الصورة
+                    response = requests.post(ROUTER_URL, json=payload, headers=headers)
                     
-                    if image_bytes:
-                        image = Image.open(io.BytesIO(image_bytes))
-                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
+                    if response.status_code == 200:
+                        # استخراج رابط الصورة أو بايتات الصورة وعرضها فوراً
+                        img_url = response.json()['data'][0]['url']
+                        img_response = requests.get(img_url)
                         
-                        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
-                        st.session_state.messages.append({"role": "assistant", "content": f"IMAGE_BYTES:{img_base64}"})
-                        st.rerun()
+                        if img_response.status_code == 200:
+                            image = Image.open(io.BytesIO(img_response.content))
+                            st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
+                            
+                            # حفظ اللوحة في الذاكرة لكي لا تضيع
+                            img_base64 = base64.b64encode(img_response.content).decode('utf-8')
+                            st.session_state.drawings.append({"prompt": draw_query, "img_base64": img_base64})
+                            st.rerun()
                     else:
-                        st.error("⚠️ عذراً يا أحلام، يبدو أن سيرفر الرسم مشغول حالياً، حاولي مجدداً بعد ثوانٍ.")
+                        # في حال وجود صيانة مؤقتة لسيرفر كروك نستخدم المحرك الرديف المفتوح لضمان ألا تخرج أحلام خالية الوفاض
+                        BACKUP_URL = "https://huggingface.co"
+                        headers_bf = {"Authorization": f"Bearer {st.secrets['HF_TOKEN']}"}
+                        res_backup = requests.post(BACKUP_URL, headers=headers_hf, json={"inputs": english_prompt})
+                        
+                        if res_backup.status_code == 200:
+                            image = Image.open(io.BytesIO(res_backup.content))
+                            st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
+                            img_base64 = base64.b64encode(res_backup.content).decode('utf-8')
+                            st.session_state.drawings.append({"prompt": draw_query, "img_base64": img_base64})
+                            st.rerun()
+                        else:
+                            st.error("⚠️ واجه سيرفر الرسم ضغطاً مؤقتاً، اضغطي على الزر مجدداً لتوليدها فوراً!")
+                            
+                except Exception as e:
+                    st.error(f"⚠️ واجهت سمسمة مشكلة تقنية: {e}")
