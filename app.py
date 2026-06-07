@@ -1,80 +1,92 @@
 import streamlit as st
-import requests
-import urllib3
+import base64
+from groq import Groq  # استيراد المكتبة الرسمية والآمنة لـ Groq
 
-# إيقاف تحذيرات الاتصال
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# إعدادات الصفحة
+# 1. إعدادات واجهة الصفحة بالكامل
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
-
-st.markdown("""
-<style>
-div[data-testid="stChatMessage"] { text-align: right; direction: rtl; }
-div[data-testid="stChatMessage"] p { font-size: 18px; font-family: 'Amiri', serif; }
-h1 { text-align: center; color: #FF4081; font-family: 'Amiri', serif; }
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🌸 سمسمة: صديقة أحلام")
 
-# الروابط والمفاتيح
-API_KEY = st.secrets["GROQ_API_KEY"]
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+# 2. تهيئة العميل البرمجي باستخدام المفتاح السري بأمان من إعدادات Streamlit
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-SYSTEM_INSTRUCTION = {
-    "role": "system",
-    "content": "أنتِ سمسمة، الصديقة المقربة لـ 'أحلام'. ردودكِ بسيطة، هادئة، ومختصرة. خاطبي 'أحلام' باسمها. كوني صديقة عقلانية ومتزنة."
-}
-
+# 3. إدارة جلسة الذاكرة وتاريخ المحادثة
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# عرض المحادثة
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-def get_ai_response(user_input):
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    # تجهيز سجل المحادثة (نص فقط)
-    context = [SYSTEM_INSTRUCTION] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[-10:]]
-    
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": context,
-        "temperature": 0.7
-    }
-
-    try:
-        r = requests.post(GROQ_URL, headers=headers, json=payload, verify=False, timeout=20)
-        if r.status_code == 200:
-            return r.json()['choices'][0]['message']['content'].strip()
+# 4. عرض المحادثات السابقة المخرنة على الشاشة للمستخدم
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        if isinstance(msg["content"], list):
+            text_content = next((item["text"] for item in msg["content"] if item["type"] == "text"), "")
+            st.markdown(text_content)
         else:
-            return f"عذراً يا أحلام، سمسمة واجهت خطأ تقنياً بسيطاً (رمز: {r.status_code})."
-    except:
-        return "مشكلة في الاتصال، حاولي مجدداً يا أحلام."
+            st.markdown(msg["content"])
 
-# واجهة المدخلات (نص فقط)
-user_query = st.chat_input("اكتبي لسمسمة يا أحلام...")
+# 5. عناصر واجهة الاستلام (رفع الصور وصندوق المدخلات)
+uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"])
+user_query = st.chat_input("اكتبي لسمسمة...")
 
 if user_query:
-    with st.chat_message("user"):
-        st.markdown(user_query)
-    
-    st.session_state.messages.append({"role": "user", "content": user_query})
+    # صياغة محتوى رسالة المستخدم وتشفير الصورة إن وجدت بصيغة Base64
+    if uploaded_file:
+        image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+        user_content = [
+            {"type": "text", "text": user_query},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+        ]
+        with st.chat_message("user"):
+            st.image(uploaded_file, caption="الصورة المرفوعة")
+            st.markdown(user_query)
+    else:
+        user_content = user_query
+        with st.chat_message("user"):
+            st.markdown(user_query)
 
+    # حفظ مدخلات المستخدم في الذاكرة الحالية للجلسة
+    st.session_state.messages.append({"role": "user", "content": user_content})
+
+    # 6. استدعاء معالجة الذكاء الاصطناعي وعرض رد المساعد
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر..."):
-            response = get_ai_response(user_query)
-            st.markdown(response)
+            try:
+                # دمج توجيهات الشخصية لحماية توافق السيرفر مع موديلات الرؤية
+                system_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
+                
+                # بناء هيكلية مصفوفة الرسائل المخصصة المعتمدة لدى كروك
+                final_payload_messages = []
+                for i, msg in enumerate(st.session_state.messages):
+                    if isinstance(msg["content"], list):
+                        if i == 0 and msg["role"] == "user":
+                            injected = []
+                            for item in msg["content"]:
+                                if item["type"] == "text":
+                                    injected.append({"type": "text", "text": system_prompt + item["text"]})
+                                else:
+                                    injected.append(item)
+                            final_payload_messages.append({"role": msg["role"], "content": injected})
+                        else:
+                            final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
+                    else:
+                        text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
+                        final_payload_messages.append({
+                            "role": msg["role"],
+                            "content": [{"type": "text", "text": text_val}]
+                        })
 
-    st.session_state.messages.append({"role": "assistant", "content": response})
+                # طلب التوليد من نموذج الرؤية والمحادثة المحدث والمعتمد
+                chat_completion = client.chat.completions.create(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct", 
+                    messages=final_payload_messages,
+                    temperature=0.5
+                )
+                
+                # استخلاص النتيجة بالشكل الصحيح وقراءة المصفوفة [0]
+                response = chat_completion.choices[0].message.content
+                st.markdown(response)
+                
+                # حفظ رد المساعد في الجلسة لمتابعة سياق الحديث
+                st.session_state.messages.append({"role": "assistant", "content": response})
 
-if st.sidebar.button("تصفير المحادثة"):
-    st.session_state.messages = []
-    st.rerun()
+            except Exception as e:
+                # إظهار رسالة خطأ واضحة للمطور في حال وجود مشاكل بالمفتاح أو الحصص
+                st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
