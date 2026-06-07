@@ -22,7 +22,7 @@ def log_to_sheets(user_msg, bot_msg):
         
         # --- [ملاحظة: هذا هو السطر الذي تحتاج لتعديله فقط] ---
         # استبدل الجملة التالية بـ اسم ملف الجدول الذي أنشأته في جوجل
-        sheet_name = "simsima-bot" 
+        sheet_name = "SIMSIME_BOT" 
         # ----------------------------------------------------
         
         sh = gc.open(sheet_name).sheet1
