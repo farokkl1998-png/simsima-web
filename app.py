@@ -63,9 +63,16 @@ with tab1:
     if user_query:
         if uploaded_file:
             image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+            # الهيكلية الصارمة المتوافقة مع نموذج Llama 4 Scout لضمان الرؤية الفورية
             user_content = [
-                {"type": "text", "text": user_query},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                {
+                    "type": "image_url", 
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
+                },
+                {
+                    "type": "text", 
+                    "text": user_query
+                }
             ]
             with st.chat_message("user"):
                 st.image(uploaded_file, caption="الصورة المرفوعة")
@@ -101,6 +108,61 @@ with tab1:
                                 final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
                         else:
                             text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
+                            final_payload_messages.append({
+                                "role": msg["role"],
+                                "content": [{"type": "text", "text": text_val}]
+                            })
+
+                    chat_completion = client.chat.completions.create(
+                        model="meta-llama/llama-4-scout-17b-16e-instruct", 
+                        messages=final_payload_messages,
+                        temperature=0.5
+                    )
+                    
+                    response = chat_completion.choices[0].message.content
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
+
+with tab2:
+    # استخدام استمارة Form لإجبار المتصفح والهاتف على إرسال بيانات الرسم عند الضغط على الزر
+    with st.form(key="drawing_form", clear_on_submit=True):
+        draw_query = st.text_input("ماذا تريدين أن أرسم لكِ يا أحلام؟ 🌸", placeholder="مثال: فتاة صغيرة تمسك قطة...")
+        submit_button = st.form_submit_button(label="اضغطي هنا للرسم ✨")
+        
+        if submit_button and draw_query:
+            with st.chat_message("user"):
+                st.markdown(f"🎨 طلب رسم: {draw_query}")
+            st.session_state.messages.append({"role": "user", "content": f"🎨 طلب رسم: {draw_query}"})
+
+            with st.chat_message("assistant"):
+                with st.spinner("سمسمة تمسك الألوان وترسم لكِ الآن... 🎨"):
+                    try:
+                        # ترجمة وتحسين الطلب عبر كروك للحصول على أدق تفاصيل فنية لنموذج الرسام
+                        translation_completion = client.chat.completions.create(
+                            model="meta-llama/llama-4-scout-17b-16e-instruct",
+                            messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
+                            temperature=0.3
+                        )
+                        english_prompt = translation_completion.choices[0].message.content
+                    except Exception:
+                        english_prompt = draw_query
+
+                    # استدعاء المحرك الجديد السريع مباشرة
+                    image_bytes = generate_image_cloud(english_prompt)
+                    
+                    if image_bytes:
+                        image = Image.open(io.BytesIO(image_bytes))
+                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
+                        
+                        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                        st.session_state.messages.append({"role": "assistant", "content": f"IMAGE_BYTES:{img_base64}"})
+                        st.rerun()
+                    else:
+                        st.error("⚠️ عذراً يا أحلام، يبدو أن سيرفر الرسم مشغول حالياً، حاولي مجدداً بعد ثوانٍ.")
                             final_payload_messages.append({
                                 "role": msg["role"],
                                 "content": [{"type": "text", "text": text_val}]
