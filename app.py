@@ -3,12 +3,12 @@ import base64
 import requests
 import io
 from PIL import Image
-from groq import Groq  # سنبقيها لعملية الترجمة الذكية فقط
+from groq import Groq
 
 # 1. إعدادات واجهة منصة رسم سمسمة
 st.set_page_config(page_title="ريشة سمسمة الفنية", page_icon="🎨", layout="centered")
 st.title("🎨 ريشة سمسمة الفنية")
-st.subheader("اكتبي ما يتخيله عقلكِ، ودعي سمسمة تحوله إلى لوحة حقيقية بلمح البصر! ✨")
+st.subheader("اكتبي ما يتخيله عقلكِ Network، ودعي سمسمة تحوله إلى لوحة حقيقية بلمح البصر! ✨")
 
 # 2. تهيئة المفتاح السري لـ Groq بأمان (نستخدمه للترجمة فقط)
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -43,21 +43,25 @@ with st.form(key="super_drawing_form", clear_on_submit=True):
                     # الخطوة الأولى: نطلب من نموذج كروك ترجمة وتحسين الوصف إلى الإنجليزية بدقة عالية
                     translation_completion = client.chat.completions.create(
                         model="meta-llama/llama-4-scout-17b-16e-instruct",
-                        messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
+                        messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the final English prompt text, DO NOT include any website names, prefixes, or links: {draw_query}"}],
                         temperature=0.3
                     )
                     
-                    # قراءة رد الترجمة بطريقة القاموس الآمنة المتوافقة مع لاما 4
-                    english_prompt = translation_completion.choices[0].message.content
+                    # قراءة رد الترجمة الصافي
+                    english_prompt = translation_completion.choices.message.content
                     
-                    # تنظيف النص من أي علامات اقتباس زائدة قد تفسد الرابط
+                    # تنظيف جذري وصارم للنص لتفادي خطأ Failed to parse نهائياً
                     english_prompt = english_prompt.replace('"', '').replace("'", "").strip()
+                    if "pollinations.ai" in english_prompt.lower():
+                        english_prompt = english_prompt.lower().replace("pollinations.ai", "").strip()
+                    if english_prompt.startswith("/") or english_prompt.startswith(":"):
+                        english_prompt = english_prompt[1:].strip()
 
-                    # الخطوة الثانية السحرية: توليد الصورة عبر رابط Pollinations المباشر والمفتوح (Flux Model)
-                    # هذا الرابط يحول النص الإنجليزي مباشرة إلى صورة فوتوغرافية ومستحيل يعطي 405
+                    # الخطوة الثانية: تشفير النص الآمن ودمجه في المسار النقي لموقع الرسم
                     encoded_prompt = requests.utils.quote(english_prompt)
-                    POLLINATIONS_URL = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&seed=42&model=flux"
+                    POLLINATIONS_URL = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&model=flux"
                     
+                    # سحب الصورة مباشرة كملف آمن بنظام GET
                     img_response = requests.get(POLLINATIONS_URL)
                     
                     if img_response.status_code == 200:
