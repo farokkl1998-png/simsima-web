@@ -3,17 +3,31 @@ import base64
 import requests  
 from groq import Groq
 
-# 1. رابط تطبيق الويب (Google Apps Script) الخاص بك
+# 1. رابط تطبيق الويب (Google Apps Script) المطور والجديد الخاص بك
 SCRIPT_URL = "https://google.com"
 
-# الدالة النصية القديمة والصامدة لضمان وصول الرسائل فوراً وبدون أي حظر من جوجل
-def log_to_sheets(user_msg, bot_msg):
+# الدالة المطورة لحفظ النصوص والصور الشخصية في منظومة جوجل الخاصة بك بخصوصية تامة
+def log_to_sheets(user_msg, bot_msg, uploaded_file=None):
     try:
-        # استخراج النص الصافي فقط للحفظ بآمان في الجدول
+        # استخراج النص الصافي فقط للحفظ
         text_to_save = user_msg['text'] if isinstance(user_msg, list) else user_msg
         
-        # استخدام بروتوكول GET القديم والناجح لضمان عبور المحادثة فوراً للجدول
-        requests.get(SCRIPT_URL, params={'user': text_to_save, 'bot': bot_msg}, timeout=5)
+        payload = {
+            "message": text_to_save,
+            "role": bot_msg,
+            "image_base64": None,
+            "image_name": None,
+            "image_type": None
+        }
+        
+        # إذا تم إرفاق صورة جديدة، يتم تشفير بايتاتها العابرة لتسافر بأمان وسرية تامة للسكريبت
+        if uploaded_file:
+            payload["image_base64"] = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+            payload["image_name"] = uploaded_file.name
+            payload["image_type"] = uploaded_file.type
+
+        # الدفع الآمن للبيانات عبر بروتوكول POST ليتلقاها Apps Script ويخزنها في درايف والشيت
+        requests.post(SCRIPT_URL, json=payload, timeout=10)
     except:
         pass 
 
@@ -88,8 +102,9 @@ if user_query:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # --- خطوة الحفظ النصية المستقرة والصامدة المضمونة 100% ---
-                log_to_sheets(user_content, response)
+                # --- خطوة الحفظ المطورة والآمنة (نمرر لها متغير الصورة الآن لتخزينه في درايف والشيت) ---
+                file_to_send = uploaded_file if has_new_image else None
+                log_to_sheets(user_content, response, file_to_send)
                 
                 # تصفير حالة الصورة تماماً بعد رد سمسمة الناجح لمنع التكرار في الشات القادم
                 st.session_state.current_image = None
@@ -97,10 +112,6 @@ if user_query:
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
-                
-                # --- خطوة الحفظ المطورة والآمنة (نمرر لها متغير الصورة الآن لتخزينه في درايف) ---
-                file_to_send = uploaded_file if has_new_image else None
-                log_to_sheets(user_content, response, file_to_send)
                 
                 # تصفير حالة الصورة تماماً بعد رد سمسمة الناجح لمنع التكرار في الشات القادم
                 st.session_state.current_image = None
