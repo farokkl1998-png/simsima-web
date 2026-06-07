@@ -73,15 +73,15 @@ if user_query:
                             "content": [{"type": "text", "text": text_val}]
                         })
 
-                # طلب التوليد من نموذج الرؤية والمحادثة المحدث والمعتمد بدلاً من القديم الموقوف
+                # طلب التوليد من نموذج الرؤية والمحادثة المحدث والمعتمد
                 chat_completion = client.chat.completions.create(
-                    model="meta-llama/llama-4-scout-17b-16e-instruct", # النموذج المحدث بالكامل
+                    model="meta-llama/llama-4-scout-17b-16e-instruct", 
                     messages=final_payload_messages,
                     temperature=0.5
                 )
                 
-                # استخلاص النتيجة وعرضها
-                response = chat_completion.choices.message.content
+                # استخلاص النتيجة بالشكل الصحيح وقراءة المصفوفة [0]
+                response = chat_completion.choices[0].message.content
                 st.markdown(response)
                 
                 # حفظ رد المساعد في الجلسة لمتابعة سياق الحديث
