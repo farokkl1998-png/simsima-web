@@ -1,73 +1,19 @@
 import streamlit as st
-import requests
 import base64
+from groq import Groq  # استيراد المكتبة الرسمية والآمنة لكروك
 
-# إعدادات الصفحة
+# إعدادات الصفحة والواجهة
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
-
 st.title("🌸 سمسمة: صديقة أحلام")
 
-# جلب المفتاح السري بأمان
-API_KEY = st.secrets["GROQ_API_KEY"]
-GROQ_URL = "https://groq.com"
+# تهيئة العميل الرسمي باستخدام المفتاح السري بأمان
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# دالة إرسال الطلب بعد التعديل الجذري
-def get_ai_response(messages_history):
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    # التوجيه الأساسي (تم دمج شخصية سمسمة هنا بدلاً من خيار الـ system المرفوض)
-    system_instruction = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
-    
-    payload_messages = []
-    
-    # تحويل كافة الرسائل لتبدو مهيأة تماماً لشروط Groq
-    for i, msg in enumerate(messages_history):
-        if isinstance(msg["content"], list):
-            # إذا كانت هذه أول رسالة مستخدم وبها صورة، ندمج التعليمات بداخل النص
-            if i == 0 and msg["role"] == "user":
-                updated_content = []
-                for item in msg["content"]:
-                    if item["type"] == "text":
-                        updated_content.append({"type": "text", "text": system_instruction + item["text"]})
-                    else:
-                        updated_content.append(item)
-                payload_messages.append({"role": msg["role"], "content": updated_content})
-            else:
-                payload_messages.append({"role": msg["role"], "content": msg["content"]})
-        else:
-            # معالجة النصوص العادية بدون صور
-            text_to_send = system_instruction + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
-            payload_messages.append({
-                "role": msg["role"],
-                "content": [{"type": "text", "text": text_to_send}]
-            })
-
-    payload = {
-        "model": "llama-3.2-11b-vision-preview",
-        "messages": payload_messages,
-        "temperature": 0.5
-    }
-
-    try:
-        response = requests.post(GROQ_URL, headers=headers, json=payload)
-        
-        # حماية إضافية: التحقق من كود الاستجابة قبل محاولة قراءة الـ JSON
-        if response.status_code == 200:
-            return response.json()['choices']['message']['content']
-        else:
-            # إذا أرجع السيرفر خطأ، سنعرض نص الخطأ الخام لنعرف السبب فوراً
-            return f"⚠️ خطأ من سيرفر كروك (رمز {response.status_code}): {response.text}"
-            
-    except Exception as e:
-        return f"حدث خطأ أثناء الاتصال بالشبكة: {e}"
-
-# إدارة الجلسة والمحادثة
+# إدارة الجلسة وتاريخ المحادثة
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# عرض الرسائل السابقة على الشاشة
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -76,11 +22,12 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
-# استقبال الملفات والنصوص من الواجهة
+# مدخلات الواجهة (الصورة والنص)
 uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"])
 user_query = st.chat_input("اكتبي لسمسمة...")
 
 if user_query:
+    # 1. صياغة محتوى رسالة المستخدم بناءً على وجود صورة أو عدمها
     if uploaded_file:
         image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
         user_content = [
@@ -95,11 +42,54 @@ if user_query:
         with st.chat_message("user"):
             st.markdown(user_query)
 
+    # حفظ رسالة المستخدم الحالية في ذاكرة الجلسة
     st.session_state.messages.append({"role": "user", "content": user_content})
 
+    # 2. إرسال الطلب عبر المكتبة الرسمية لضمان عدم حدوث أخطاء الـ HTTP
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر..."):
-            response = get_ai_response(st.session_state.messages)
-            st.markdown(response)
+            try:
+                # التوجيه الأساسي للشخصية مدمج بذكاء لحماية شروط موديلات الرؤية
+                system_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
+                
+                # إعداد قائمة الرسائل النهائية لإرسالها للمكتبة
+                final_payload_messages = []
+                for i, msg in enumerate(st.session_state.messages):
+                    if isinstance(msg["content"], list):
+                        if i == 0 and msg["role"] == "user":
+                            # حقن الهوية في الرسالة الأولى إذا احتوت على صورة
+                            injected = []
+                            for item in msg["content"]:
+                                if item["type"] == "text":
+                                    injected.append({"type": "text", "text": system_prompt + item["text"]})
+                                else:
+                                    injected.append(item)
+                            final_payload_messages.append({"role": msg["role"], "content": injected})
+                        else:
+                            final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
+                    else:
+                        # حقن الهوية في الرسالة النصية العادية الأولى
+                        text_val = system_prompt + msg["content"] if i == 0 and msg["role"] == "user" else msg["content"]
+                        final_payload_messages.append({
+                            "role": msg["role"],
+                            "content": [{"type": "text", "text": text_val}]
+                        })
+
+                # استدعاء السيرفر من خلال عميل Groq الرسمي
+                chat_completion = client.chat.completions.create(
+                    model="llama-3.2-11b-vision-preview",
+                    messages=final_payload_messages,
+                    temperature=0.5
+                )
+                
+                # استخراج الرد وعرضه
+                response = chat_completion.choices[0].message.content
+                st.markdown(response)
+                
+                # حفظ رد المساعد في ذاكرة الجلسة
+                st.session_state.messages.append({"role": "assistant", "content": response})
+
+            except Exception as e:
+                st.error(f"⚠️ واجهت سمسمة مشكلة أثناء معالجة الطلب: {e}")
             
     st.session_state.messages.append({"role": "assistant", "content": response})
