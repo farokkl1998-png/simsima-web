@@ -1,67 +1,84 @@
-Import streamlit as st
+import streamlit as st
 import base64
-import gspread
-import json
-from google.oauth2.service_account import Credentials
-from groq import Groq
+import requests # مكتبة إرسال البيانات للسكريبت
+from groq import Groq 
 
-# 1. إعدادات الصفحة
-st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸")
-st.title("🌸 سمسمة: صديقة أحلام")
-
-# 2. تهيئة العميل (Groq)
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# --- إعدادات ربط Google Sheets ---
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysgA3qIv1YwTZF19s63vTmaj9G4hmcbPss-f7P9bS2mMj2RA2lA8tnz8vJ4xqvVigq/exec"
 
 def log_to_sheets(user_msg, bot_msg):
     try:
-        # قراءة بيانات الاعتماد من Secrets
-        creds_data = json.loads(st.secrets["GOOGLE_SHEETS_CREDENTIALS"])
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        creds = Credentials.from_service_account_info(creds_data, scopes=scope)
-        gc = gspread.authorize(creds)
-        
-        # --- [ملاحظة: هذا هو السطر الذي تحتاج لتعديله فقط] ---
-        # استبدل الجملة التالية بـ اسم ملف الجدول الذي أنشأته في جوجل
-        sheet_name = "SIMSIME_BOT" 
-        # ----------------------------------------------------
-        
-        sh = gc.open(sheet_name).sheet1
-        sh.append_row([user_msg, bot_msg])
-    except Exception as e:
-        st.error(f"⚠️ خطأ في الاتصال بالجدول: {e}")
+        # إرسال البيانات للسكريبت الخاص بك
+        requests.get(SCRIPT_URL, params={'user': user_msg, 'bot': bot_msg}, timeout=5)
+    except:
+        pass # نتجاهل الأخطاء لضمان استمرار عمل البوت
 
-# 3. إدارة الذاكرة
+# 1. إعدادات واجهة الصفحة
+st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
+st.title("🌸 سمسمة: صديقة أحلام")
+
+# 2. تهيئة العميل البرمجي
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+# 3. إدارة جلسة الذاكرة
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 4. عرض الرسائل
+# 4. عرض المحادثات السابقة
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        if isinstance(msg["content"], list):
+            text_content = next((item["text"] for item in msg["content"] if item["type"] == "text"), "")
+            st.markdown(text_content)
+        else:
+            st.markdown(msg["content"])
 
-# 5. منطقة الإدخال
+# 5. عناصر واجهة الاستلام
+uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"])
 user_query = st.chat_input("اكتبي لسمسمة...")
 
 if user_query:
-    with st.chat_message("user"):
-        st.markdown(user_query)
-    st.session_state.messages.append({"role": "user", "content": user_query})
+    if uploaded_file:
+        image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+        user_content = [
+            {"type": "text", "text": user_query},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+        ]
+        with st.chat_message("user"):
+            st.image(uploaded_file, caption="الصورة المرفوعة")
+            st.markdown(user_query)
+    else:
+        user_content = user_query
+        with st.chat_message("user"):
+            st.markdown(user_query)
 
-    # 6. الرد من سمسمة
+    st.session_state.messages.append({"role": "user", "content": user_content})
+
+    # 6. استدعاء معالجة الذكاء الاصطناعي
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر..."):
             try:
+                system_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها."
+                
+                final_payload_messages = []
+                for i, msg in enumerate(st.session_state.messages):
+                    if isinstance(msg["content"], list):
+                        final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
+                    else:
+                        final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
+
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=st.session_state.messages,
-                    temperature=0.7
+                    model="meta-llama/llama-4-scout-17b-16e-instruct", 
+                    messages=final_payload_messages,
+                    temperature=0.5
                 )
+                
                 response = chat_completion.choices[0].message.content
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # حفظ المحادثة في Google Sheets
+                # --- تسجيل المحادثة في جوجل شيتس ---
                 log_to_sheets(user_query, response)
-                
+
             except Exception as e:
-                st.error(f"خطأ في الرد: {e}") 
+                st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
