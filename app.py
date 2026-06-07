@@ -16,7 +16,7 @@ HF_TOKEN = st.secrets["HF_TOKEN"]
 # تهيئة عميل كروك الرسمي لنصوص ورؤية الصور
 client = Groq(api_key=GROQ_API_KEY)
 
-# استخدام المحرك العالمي الأحدث والأسرع كلياً (FLUX.1-schnell) لضمان التوليد الفوري للملفات
+# استخدام المحرك المستقر والمجاني 100% على Hugging Face لمنع رسائل انشغال السيرفر
 HF_API_URL = "https://huggingface.co"
 headers_hf = {"Authorization": f"Bearer {HF_TOKEN}"}
 
@@ -78,7 +78,6 @@ with tab1:
                 try:
                     sys_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. أجيبي على ما يلي: "
                     
-                    # بناء سريع ومسطح ومحمي كلياً من أخطاء المسافات لتاريخ رسائل كروك
                     payload_msgs = []
                     for i, m in enumerate(st.session_state.messages):
                         if isinstance(m["content"], str) and m["content"].startswith("IMAGE_BYTES:"):
@@ -89,7 +88,6 @@ with tab1:
                         else:
                             payload_msgs.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
                     
-                    # حقن شخصية سمسمة بأمان في الرسالة الأخيرة
                     if payload_msgs and payload_msgs[-1]["role"] == "user":
                         for item in payload_msgs[-1]["content"]:
                             if item["type"] == "text":
@@ -101,7 +99,8 @@ with tab1:
                         temperature=0.5
                     )
                     
-                    response = chat_completion.choices.message.content
+                    # التعديل الحاسم لقراءة نص الرد ومنع خطأ الـ attribute message
+                    response = chat_completion.choices[0].message.content
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
                     st.rerun()
@@ -126,7 +125,7 @@ with tab2:
                             messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for an image generation model, make it cinematic and highly detailed. Output ONLY the English prompt: {draw_query}"}],
                             temperature=0.3
                         )
-                        english_prompt = translation_completion.choices.message.content
+                        english_prompt = translation_completion.choices[0].message.content
                     except Exception:
                         english_prompt = draw_query
 
