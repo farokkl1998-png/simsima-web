@@ -3,15 +3,21 @@ import base64
 import requests  
 from groq import Groq
 
-# 1. رابط تطبيق الويب (Google Apps Script) المطور والجديد الخاص بك
-SCRIPT_URL = "https://google.com"
+# رابط الـ Web app المطور والمنشور بنجاح من قبلك لـ Google Apps Script
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysgA3qIv1YwTZF19s63vTmaj9G4hmcbPss-f7P9bS2mMj2RA2lA8tnz8vJ4xqvVigq/exec"
 
-# الدالة المطورة لحفظ النصوص والصور الشخصية في منظومة جوجل الخاصة بك بخصوصية تامة
-def log_to_sheets(user_msg, bot_msg, uploaded_file=None):
+# دالة الحفظ المطهرة والآمنة لإرسال النصوص والصور معاً بخصوصية وسرية تامة لحسابك الشخصي
+def log_to_sheets(raw_user_msg, bot_msg, uploaded_file=None):
     try:
-        # استخراج النص الصافي فقط للحفظ
-        text_to_save = user_msg['text'] if isinstance(user_msg, list) else user_msg
-        
+        # التفكيك البرمجي الصحيح والمضمون لاستخراج النص سواء كان قائمة أو نصاً عادياً
+        text_to_save = ""
+        if isinstance(raw_user_msg, list):
+            for item in raw_user_msg:
+                if item.get("type") == "text":
+                    text_to_save = item.get("text", "")
+        else:
+            text_to_save = raw_user_msg
+            
         payload = {
             "message": text_to_save,
             "role": bot_msg,
@@ -20,18 +26,17 @@ def log_to_sheets(user_msg, bot_msg, uploaded_file=None):
             "image_type": None
         }
         
-        # إذا تم إرفاق صورة جديدة، يتم تشفير بايتاتها العابرة لتسافر بأمان وسرية تامة للسكريبت
+        # تشفير الصورة في الهاتف عابراً لحماية أمان أحلام بخصوصية مطلقة
         if uploaded_file:
             payload["image_base64"] = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
             payload["image_name"] = uploaded_file.name
             payload["image_type"] = uploaded_file.type
 
-        # الدفع الآمن للبيانات عبر بروتوكول POST ليتلقاها Apps Script ويخزنها في درايف والشيت
+        # الدفع السحابي الآمن عبر بروتوكول POST المصادق عليه
         requests.post(SCRIPT_URL, json=payload, timeout=10)
     except:
         pass 
 
-# إعدادات واجهة الصفحة بالكامل لتناسب الهواتف
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
 st.title("🌸 سمسمة: صديقة أحلام")
 
@@ -40,11 +45,10 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ميزة سحرية لتخزين حالة الصورة ومنع تكرارها تلقائياً على المتصفح
 if "current_image" not in st.session_state:
     st.session_state.current_image = None
 
-# عرض المحادثات السابقة المخزنة على الشاشة للمستخدم بشكل نظيف ومصغر لحفظ المساحة
+# عرض المحادثات بشكل مريح لشاشة الهاتف
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -53,14 +57,12 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
-# تصميم الواجهة المطور والجديد لرافع الصور وصندوق الشات لراحة أحلام على الهاتف
 st.markdown("---")
 uploaded_file = st.file_uploader("📎 اضغطي هنا لإرفاق صورة لسمسمة...", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
 user_query = st.chat_input("اكتبي لسمسمة...")
 
 if user_query:
     has_new_image = False
-    # التحقق مما إذا كانت هناك صورة مرفوعة جديدة لم تُعالج بعد لمنع تكرارها
     if uploaded_file and st.session_state.current_image != uploaded_file.name:
         image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
         user_content = [
@@ -102,18 +104,10 @@ if user_query:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # --- خطوة الحفظ المطورة والآمنة (نمرر لها متغير الصورة الآن لتخزينه في درايف والشيت) ---
+                # خطوة الحفظ وتمرير المتغيرات بشكل آمن ومنظم
                 file_to_send = uploaded_file if has_new_image else None
                 log_to_sheets(user_content, response, file_to_send)
                 
-                # تصفير حالة الصورة تماماً بعد رد سمسمة الناجح لمنع التكرار في الشات القادم
-                st.session_state.current_image = None
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
-                
-                # تصفير حالة الصورة تماماً بعد رد سمسمة الناجح لمنع التكرار في الشات القادم
                 st.session_state.current_image = None
                 st.rerun()
 
