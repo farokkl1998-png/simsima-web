@@ -3,7 +3,7 @@ import base64
 import requests
 import io
 from PIL import Image
-from groq import Groq  # المكتبة الرسمية لـ Groq
+from groq import Groq  # استيراد المكتبة الرسمية
 
 # 1. إعدادات واجهة منصة رسم سمسمة
 st.set_page_config(page_title="ريشة سمسمة الفنية", page_icon="🎨", layout="centered")
@@ -46,37 +46,30 @@ with st.form(key="super_drawing_form", clear_on_submit=True):
                         messages=[{"role": "user", "content": f"Translate and enhance this prompt to English for a highly creative image generation model. Output ONLY the final English prompt, no other text: {draw_query}"}],
                         temperature=0.3
                     )
-                    english_prompt = translation_completion.choices[0].message.content
+                    english_prompt = translation_completion.choices.message.content
 
-                    # الخطوة الثانية: استدعاء سيرفر الرسم الرسمي والمباشر من شركة كروك
-                    ROUTER_URL = "https://groq.com"
-                    headers = {
-                        "Authorization": f"Bearer {GROQ_API_KEY}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": "black-forest-labs/FLUX.1-schnell",  # نموذج الرسم الرسمي المعتمد في كروك
-                        "prompt": english_prompt,
-                        "n": 1,
-                        "size": "1024x1024"
-                    }
+                    # الخطوة الثانية الحاسمة: استدعاء التوليد الرسمي عبر مكتبة Groq لنسف خطأ 405
+                    response = client.images.generate(
+                        model="black-forest-labs/FLUX.1-schnell", # نموذج الرسم الرسمي والمدعوم في كروك
+                        prompt=english_prompt,
+                        n=1,
+                        size="1024x1024"
+                    )
                     
-                    response = requests.post(ROUTER_URL, json=payload, headers=headers)
+                    # استخراج رابط الصورة الصافي من رد الـ SDK المعتمد
+                    img_url = response.data.url
+                    img_response = requests.get(img_url)
                     
-                    if response.status_code == 200:
-                        img_url = response.json()['data'][0]['url']
-                        img_response = requests.get(img_url)
+                    if img_response.status_code == 200:
+                        image = Image.open(io.BytesIO(img_response.content))
+                        st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
                         
-                        if img_response.status_code == 200:
-                            image = Image.open(io.BytesIO(img_response.content))
-                            st.image(image, caption="تفضلي رسمتي يا أحلام! ✨")
-                            
-                            # حفظ اللوحة في الذاكرة لكي لا تضيع
-                            img_base64 = base64.b64encode(img_response.content).decode('utf-8')
-                            st.session_state.drawings.append({"prompt": draw_query, "img_base64": img_base64})
-                            st.rerun()
+                        # حفظ اللوحة في الذاكرة لكي لا تضيع
+                        img_base64 = base64.b64encode(img_response.content).decode('utf-8')
+                        st.session_state.drawings.append({"prompt": draw_query, "img_base64": img_base64})
+                        st.rerun()
                     else:
-                        st.error(f"⚠️ واجه سيرفر كروك مشكلة (رمز {response.status_code}): {response.text}")
+                        st.error("⚠️ فشل تحميل الصورة بعد توليدها، حاولي مجدداً.")
                             
                 except Exception as e:
                     st.error(f"⚠️ واجهت سمسمة مشكلة تقنية أثناء معالجة الطلب: {e}")
