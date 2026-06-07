@@ -1,5 +1,7 @@
-streamlit
+Streamlit
 groq
 Pillow
 requests
 translators
+gspread
+oauth2client
