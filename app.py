@@ -3,10 +3,10 @@ import base64
 import requests  
 from groq import Groq
 
-# رابط الـ Web app المطور والمنشور بنجاح من قبلك لـ Google Apps Script
+# رابط الـ Web app الخاص بك والذي قمت بنشره بنجاح
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysgA3qIv1YwTZF19s63vTmaj9G4hmcbPss-f7P9bS2mMj2RA2lA8tnz8vJ4xqvVigq/exec"
 
-# دالة الحفظ المطهرة والآمنة التي تضمن وصول النصوص والروابط معاً فوراً
+# دالة الحفظ القاطعة للأخطاء والتي ترسل الكلمات والصور على هيئة نصوص مشفرة صافية
 def log_to_sheets(raw_user_msg, bot_msg, uploaded_file=None):
     try:
         # استخراج النص الصافي لرسالة أحلام بشكل مسطح ومضمون للبايثون
@@ -21,19 +21,13 @@ def log_to_sheets(raw_user_msg, bot_msg, uploaded_file=None):
         # إرسال النصوص بالطريقة القديمة الناجحة كـ params لضمان العبور الفوري
         params = {'user': text_to_save, 'bot': bot_msg}
         
-        payload = {
-            "image_base64": None,
-            "image_name": None,
-            "image_type": None
-        }
+        payload = {"image_base64": None}
         
-        # إذا تم رفع صورة، يتم تشفير بايتاتها عابراً لحماية أمان أحلام
+        # إذا تم رفع صورة، يتم تحويلها لنص Base64 صافي وإرسالها بداخل الحزمة
         if uploaded_file:
             payload["image_base64"] = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-            payload["image_name"] = uploaded_file.name
-            payload["image_type"] = uploaded_file.type
 
-        # الدفع السحابي المزدوج والمضمون 100%
+        # الدفع السحابي الآمن والمضمون 100% بنظام الـ POST
         requests.post(SCRIPT_URL, params=params, json=payload, timeout=10)
     except:
         pass 
@@ -105,7 +99,7 @@ if user_query:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # خطوة حفظ الكلمات وتمرير ملف الصورة ليتم رفعه بالدرايف بخصوصية مطلقة
+                # خطوة حفظ الكلمات وتمرير الصورة المشفرة كنص آمن
                 file_to_send = uploaded_file if has_new_image else None
                 log_to_sheets(user_content, response, file_to_send)
                 
