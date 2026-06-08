@@ -1,15 +1,18 @@
 import streamlit as st
 import base64
-import requests  # <-- هذا هو الاستيراد الذي كان ناقصاً
+import requests
 from groq import Groq
 
-# 1. إعدادات واجهة الصفحة
+# 1. إعدادات واجهة الصفحة والرابط المعتمد
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysgA3qIv1YwTZF19s63vTmaj9G4hmcbPss-f7P9bS2mMj2RA2lA8tnz8vJ4xqvVigq/exec"
 
 def log_to_sheets(user_msg, bot_msg):
     try:
-        # إذا كانت الرسالة قائمة (يعني فيها صورة)، نأخذ النص فقط للحفظ
+        # معالجة ذكية للصور: إذا كانت الرسالة قائمة، نكتب [صورة مرفقة]
         text_to_save = user_msg[0]['text'] if isinstance(user_msg, list) else user_msg
+        if isinstance(user_msg, list): 
+            text_to_save = "[صورة مرفقة] " + text_to_save
+        
         requests.get(SCRIPT_URL, params={'user': text_to_save, 'bot': bot_msg}, timeout=5)
     except:
         pass 
@@ -17,11 +20,13 @@ def log_to_sheets(user_msg, bot_msg):
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
 st.title("🌸 سمسمة: صديقة أحلام")
 
+# 2. تهيئة العميل
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# 3. عرض المحادثات
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -30,6 +35,7 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
+# 4. واجهة الإدخال
 uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"])
 user_query = st.chat_input("اكتبي لسمسمة...")
 
@@ -53,18 +59,10 @@ if user_query:
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر..."):
             try:
-                system_prompt = "أنتِ سمسمة، الصديقة المقربة لأحلام. كوني عقلانية ولطيفة وتحدثي بالعامية أو الفصحى اللطيفة حسب أسلوبها. "
-                
-                final_payload_messages = []
-                for i, msg in enumerate(st.session_state.messages):
-                    if isinstance(msg["content"], list):
-                        final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
-                    else:
-                        final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
-
+                # 5. استدعاء الذكاء الاصطناعي
                 chat_completion = client.chat.completions.create(
                     model="meta-llama/llama-4-scout-17b-16e-instruct", 
-                    messages=final_payload_messages,
+                    messages=st.session_state.messages,
                     temperature=0.5
                 )
                 
@@ -72,15 +70,8 @@ if user_query:
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # --- خطوة الحفظ (تم إضافتها هنا) ---
+                # 6. الحفظ التلقائي في الجدول
                 log_to_sheets(user_content, response)
-
-            except Exception as e:
-                st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
-                log_to_sheets(user_content, response, file_to_send)
-                
-                st.session_state.current_image = None
-                st.rerun()
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
