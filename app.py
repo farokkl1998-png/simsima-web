@@ -1,34 +1,16 @@
 import streamlit as st
 import base64
-import requests  
+import requests  # <-- هذا هو الاستيراد الذي كان ناقصاً
 from groq import Groq
 
-# رابط الـ Web app الخاص بك والذي قمت بنشره بنجاح
+# 1. إعدادات واجهة الصفحة
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysgA3qIv1YwTZF19s63vTmaj9G4hmcbPss-f7P9bS2mMj2RA2lA8tnz8vJ4xqvVigq/exec"
 
-# دالة الحفظ القاطعة للأخطاء والتي ترسل الكلمات والصور على هيئة نصوص مشفرة صافية
-def log_to_sheets(raw_user_msg, bot_msg, uploaded_file=None):
+def log_to_sheets(user_msg, bot_msg):
     try:
-        # استخراج النص الصافي لرسالة أحلام بشكل مسطح ومضمون للبايثون
-        text_to_save = ""
-        if isinstance(raw_user_msg, list):
-            for item in raw_user_msg:
-                if item.get("type") == "text":
-                    text_to_save = item.get("text", "")
-        else:
-            text_to_save = raw_user_msg
-            
-        # إرسال النصوص بالطريقة القديمة الناجحة كـ params لضمان العبور الفوري
-        params = {'user': text_to_save, 'bot': bot_msg}
-        
-        payload = {"image_base64": None}
-        
-        # إذا تم رفع صورة، يتم تحويلها لنص Base64 صافي وإرسالها بداخل الحزمة
-        if uploaded_file:
-            payload["image_base64"] = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-
-        # الدفع السحابي الآمن والمضمون 100% بنظام الـ POST
-        requests.post(SCRIPT_URL, params=params, json=payload, timeout=10)
+        # إذا كانت الرسالة قائمة (يعني فيها صورة)، نأخذ النص فقط للحفظ
+        text_to_save = user_msg[0]['text'] if isinstance(user_msg, list) else user_msg
+        requests.get(SCRIPT_URL, params={'user': text_to_save, 'bot': bot_msg}, timeout=5)
     except:
         pass 
 
@@ -40,10 +22,6 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "current_image" not in st.session_state:
-    st.session_state.current_image = None
-
-# عرض تاريخ الدردشة بشكل نظيف ومصغر لحفظ مساحة شاشة الهاتف
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -52,24 +30,19 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
-st.markdown("---")
-uploaded_file = st.file_uploader("📎 اضغطي هنا لإرفاق صورة لسمسمة...", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"])
 user_query = st.chat_input("اكتبي لسمسمة...")
 
 if user_query:
-    has_new_image = False
-    if uploaded_file and st.session_state.current_image != uploaded_file.name:
+    if uploaded_file:
         image_base64 = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
         user_content = [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
-            {"type": "text", "text": user_query}
+            {"type": "text", "text": user_query},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
         ]
         with st.chat_message("user"):
-            st.image(uploaded_file, caption="الصورة المرسلة 📸", width=250)
+            st.image(uploaded_file, caption="الصورة المرفوعة")
             st.markdown(user_query)
-            
-        st.session_state.current_image = uploaded_file.name
-        has_new_image = True
     else:
         user_content = user_query
         with st.chat_message("user"):
@@ -95,12 +68,15 @@ if user_query:
                     temperature=0.5
                 )
                 
-                response = chat_completion.choices.message.content
+                response = chat_completion.choices[0].message.content
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                # خطوة حفظ الكلمات وتمرير الصورة المشفرة كنص آمن
-                file_to_send = uploaded_file if has_new_image else None
+                # --- خطوة الحفظ (تم إضافتها هنا) ---
+                log_to_sheets(user_content, response)
+
+            except Exception as e:
+                st.error(f"⚠️ واجهت سمسمة مشكلة: {e}")
                 log_to_sheets(user_content, response, file_to_send)
                 
                 st.session_state.current_image = None
