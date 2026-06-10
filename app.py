@@ -25,18 +25,20 @@ if st.button("🔄 تفريغ المحادثة والبدء من جديد"):
     st.session_state.uploader_key = 0
     st.rerun()
 
-# التوثيق والربط مع حقن ترويسات فك حظر Cloudflare برمجياً
+# التحقق الصارم من وجود وتطابق المفتاح
+if "OPENROUTER_API_KEY" not in st.secrets:
+    st.error("⚠️ خطأ كلي: لم يتم العثور على متغير 'OPENROUTER_API_KEY' داخل إعدادات الـ Secrets الخاصة بستريمليت!")
+    st.stop()
+
+OPENROUTER_KEY = st.secrets["OPENROUTER_API_KEY"]
+
 try:
     client = OpenAI(
         base_url="https://openrouter.ai",
-        api_key=st.secrets["OPENROUTER_API_KEY"],
-        default_headers={
-            "HTTP-Referer": "https://streamlit.io",
-            "X-Title": "Simsima App"
-        }
+        api_key=OPENROUTER_KEY
     )
 except Exception as e:
-    st.error("⚠️ يرجى التأكد من إضافة مفتاح 'OPENROUTER_API_KEY' بشكل صحيح داخل الـ Secrets.")
+    st.error(f"⚠️ فشل في تهيئة مكتبة الاتصال: {e}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -88,25 +90,28 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # طلب الاستجابة الآمنة لـ Llama 3.2 Vision الحر
+                # استدعاء الموديل الحر المتوافق مع الرؤية والدردشة غير المقيدة
                 completion = client.chat.completions.create(
                     model="meta-llama/llama-3.2-11b-vision-instruct:free",
                     messages=final_payload_messages,
                     max_tokens=300
                 )
                 
-                # الفحص الحمائي لضمان القراءة النظيفة للكائنات
-                if hasattr(completion, 'choices'):
+                # التحقق الذكي لمنع قراءة صفحات الويب كـ نصوص ذكاء اصطناعي
+                if hasattr(completion, 'choices') and completion.choices:
                     bot_response_text = completion.choices[0].message.content
                     st.markdown(bot_response_text)
                     st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
                 else:
-                    bot_response_text = str(completion)
-                    st.warning(f"تنبيه من OpenRouter: {bot_response_text}")
-                    st.session_state.messages.append({"role": "assistant", "content": f"[تنبيه السيرفر]: {bot_response_text}"})
+                    st.error(f"المفتاح مرفوض من سيرفر OpenRouter. يرجى إنشاء مفتاح جديد. الرد: {completion}")
+                    bot_response_text = "المفتاح غير صالح"
 
                 log_to_sheets(user_content, bot_response_text)
                 st.rerun()
 
             except Exception as e:
-                st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
+                # إذا كانت الرسالة القادمة نصية طويلة (صفحة الويب)، سنطبع تحذيراً مفهوماً بدلاً من انهيار الواجهة
+                if "choices" in str(e):
+                    st.error("❌ تم رفض مفتاح الـ API من سيرفرات OpenRouter! يرجى إنشاء مفتاح جديد (Key) وضعه في الـ Secrets فوراً.")
+                else:
+                    st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
