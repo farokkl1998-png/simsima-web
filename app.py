@@ -84,20 +84,27 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # استدعاء الموديل الحر المتوافق مع الرؤية عبر الـ SDK الرسمي الآمن ومصادق بالكامل
+                # استدعاء الموديل الحر المتوافق مع الرؤية عبر الـ SDK الرسمي
                 completion = client.chat.completions.create(
                     model="meta-llama/llama-3.2-11b-vision-instruct:free",
                     messages=final_payload_messages,
-                    max_tokens=300 # تقييد الحجم تماماً ليمر الطلب الصغير عبر الحساب المجاني
+                    max_tokens=300
                 )
                 
-                # استخراج فوري ونظيف ومحمي للكائنات البرمجية للكود دون ترجمة يدوية مسببة للأخطاء
-                bot_response_text = completion.choices[0].message.content
-                st.markdown(bot_response_text)
-                st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                # --- الفحص الحمائي الذكي لمنع الانهيار ومعرفة رد السيرفر الصريح ---
+                if hasattr(completion, 'choices'):
+                    bot_response_text = completion.choices[0].message.content
+                    st.markdown(bot_response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                else:
+                    # إذا أرجع السيرفر نصاً عادياً (String) بدلاً من الكائن المعتاد
+                    bot_response_text = str(completion)
+                    st.warning(f"تنبيه من OpenRouter: {bot_response_text}")
+                    st.session_state.messages.append({"role": "assistant", "content": f"[تنبيه السيرفر]: {bot_response_text}"})
 
                 log_to_sheets(user_content, bot_response_text)
                 st.rerun()
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
+
