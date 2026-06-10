@@ -1,11 +1,10 @@
 import streamlit as st
 import base64
-import urllib.parse
 import requests
-from openai import OpenAI
+import urllib.parse
 
-# 1. إعدادات الحفظ والأرشفة في جوجل شيتس
 SCRIPT_URL = "https://google.com"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 def log_to_sheets(user_msg, bot_msg):
     try:
@@ -20,23 +19,21 @@ def log_to_sheets(user_msg, bot_msg):
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
 st.title("🌸 سمسمة: صديقة أحلام")
 
-# 2. الربط المعتمد والآمن عبر مكتبة OpenAI الرسمية طبقاً لدليل OpenRouter
-try:
-    client = OpenAI(
-        base_url="https://openrouter.ai",
-        api_key=st.secrets["OPENROUTER_API_KEY"]
-    )
-except Exception as e:
-    st.error("⚠️ يرجى التأكد من إضافة مفتاح 'OPENROUTER_API_KEY' بشكل صحيح داخل الـ Secrets الخاص بستريمليت.")
+# إضافة زر تصفير الذاكرة في الجانب الأيسر لتنظيف الأخطاء القديمة فوراً
+if st.button("🔄 تفريغ المحادثة والبدء من جديد"):
+    st.session_state.messages = []
+    st.session_state.uploader_key = 0
+    st.rerun()
 
-# تهيئة الذاكرة والسجل
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# عرض سجل الدردشة المستقر
+# عرض السجل الحالي
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -48,7 +45,6 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
-# أدوات الواجهة للرفع والكتابة
 uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"], key=f"file_uploader_{st.session_state.uploader_key}")
 user_query = st.chat_input("اكتبي لسمسمة...")
 
@@ -74,7 +70,11 @@ if user_query:
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تتفاعل معك..."):
             try:
-                # تجميع المحادثة بشكل مصفوفة قياسية متوافقة مع SDK المطور
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+
                 final_payload_messages = []
                 for msg in st.session_state.messages:
                     if isinstance(msg["content"], list):
@@ -82,20 +82,28 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # طلب الاستجابة الآمنة لـ Gemini عبر الـ SDK الرسمي للمكتبة
-                completion = client.chat.completions.create(
-                    model="google/gemini-2.5-flash",
-                    messages=final_payload_messages,
-                    max_tokens=1000
-                )
+                payload = {
+                    "model": "google/gemini-2.5-flash",
+                    "messages": final_payload_messages,
+                    "max_tokens": 1000
+                }
+
+                response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
+                res_data = response.json()
                 
-                # تصحيح طريقة استخراج النص الصافي طبقاً لمعايير الكائنات لـ OpenAI SDK
-                bot_response_text = completion.choices[0].message.content
-                st.markdown(bot_response_text)
-                st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                # المعالجة الحمائية القاطعة لتجنب أزمة AttributeError الكاذبة
+                if isinstance(res_data, dict) and 'choices' in res_data:
+                    bot_response_text = res_data['choices'][0]['message']['content']
+                    st.markdown(bot_response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                else:
+                    # سحب رسالة الخطأ النصية الصريحة من السيرفر وعرضها
+                    error_msg = res_data.get('error', {}).get('message', str(res_data))
+                    st.error(f"سيرفر OpenRouter رد ببيانات غير متوقعة: {error_msg}")
+                    bot_response_text = "خطأ في معالجة البيانات السحابية"
 
                 log_to_sheets(user_content, bot_response_text)
                 st.rerun()
 
             except Exception as e:
-                st.error(f"⚠️ واجهت سمسمة عقبة أثناء طلب البيانات من OpenRouter: {e}")
+                st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
