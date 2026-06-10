@@ -25,11 +25,15 @@ if st.button("🔄 تفريغ المحادثة والبدء من جديد"):
     st.session_state.uploader_key = 0
     st.rerun()
 
-# التوثيق الرسمي والأكثر أماناً لمنع أخطاء الـ JSON
+# التوثيق والربط مع حقن ترويسات فك حظر Cloudflare برمجياً
 try:
     client = OpenAI(
         base_url="https://openrouter.ai",
-        api_key=st.secrets["OPENROUTER_API_KEY"]
+        api_key=st.secrets["OPENROUTER_API_KEY"],
+        default_headers={
+            "HTTP-Referer": "https://streamlit.io",
+            "X-Title": "Simsima App"
+        }
     )
 except Exception as e:
     st.error("⚠️ يرجى التأكد من إضافة مفتاح 'OPENROUTER_API_KEY' بشكل صحيح داخل الـ Secrets.")
@@ -84,20 +88,19 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # استدعاء الموديل الحر المتوافق مع الرؤية عبر الـ SDK الرسمي
+                # طلب الاستجابة الآمنة لـ Llama 3.2 Vision الحر
                 completion = client.chat.completions.create(
                     model="meta-llama/llama-3.2-11b-vision-instruct:free",
                     messages=final_payload_messages,
                     max_tokens=300
                 )
                 
-                # --- الفحص الحمائي الذكي لمنع الانهيار ومعرفة رد السيرفر الصريح ---
+                # الفحص الحمائي لضمان القراءة النظيفة للكائنات
                 if hasattr(completion, 'choices'):
                     bot_response_text = completion.choices[0].message.content
                     st.markdown(bot_response_text)
                     st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
                 else:
-                    # إذا أرجع السيرفر نصاً عادياً (String) بدلاً من الكائن المعتاد
                     bot_response_text = str(completion)
                     st.warning(f"تنبيه من OpenRouter: {bot_response_text}")
                     st.session_state.messages.append({"role": "assistant", "content": f"[تنبيه السيرفر]: {bot_response_text}"})
@@ -107,4 +110,3 @@ if user_query:
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
-
