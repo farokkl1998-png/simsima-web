@@ -7,11 +7,24 @@ from groq import Groq
 # 1. إعدادات الحفظ والأرشفة في جوجل شيتس
 SCRIPT_URL = "https://google.com"
 
+# تحديث وتطوير دالة الحفظ لتتوافق تماماً مع بنية رسائل Groq الحديثة
 def log_to_sheets(user_msg, bot_msg):
     try:
-        text_to_save = user_msg['text'] if isinstance(user_msg, list) else user_msg
-        encoded_user = urllib.parse.quote(text_to_save)
-        encoded_bot = urllib.parse.quote(bot_msg)
+        # استخراج النص الصافي إذا كانت الرسالة مصفوفة (تحتوي على صورة) في Groq
+        if isinstance(user_msg, list):
+            text_to_save = ""
+            for item in user_msg:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_to_save = item.get("text", "")
+                    break
+        else:
+            text_to_save = user_msg
+        
+        # ترميز وتشفير النصوص العربية لضمان عبورها الآمن عبر الروابط
+        encoded_user = urllib.parse.quote(str(text_to_save))
+        encoded_bot = urllib.parse.quote(str(bot_msg))
+        
+        # إرسال البيانات إلى سكريبت جوجل شيتس
         final_url = f"{SCRIPT_URL}?user={encoded_user}&bot={encoded_bot}"
         requests.get(final_url, timeout=10)
     except Exception as e:
@@ -40,9 +53,10 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
             for item in msg["content"]:
-                if item["type"] == "text":
+                if isinstance(item, dict) and item.get("type") == "text":
                     st.markdown(item["text"])
-                elif item["type"] == "image_url":
+                elif isinstance(item, dict) and item.get("type") == "image_url":
+                    # استخراج وإعادة عرض الصور القديمة في السجل بدقة
                     base64_data = item["image_url"]["url"].split(",")[-1]
                     st.image(base64.b64decode(base64_data), caption="الصورة في السجل")
         else:
@@ -74,7 +88,7 @@ if user_query:
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تفكر وتتفاعل..."):
             try:
-                # --- أمر النظام المطور والمحكم لكسر الجمود وتحرير نبرة سمسمة بالكامل ---
+                # أمر النظام المطور والمحكم لكسر الجمود وتحرير نبرة سمسمة بالكامل
                 system_instruction = (
                     "أنتِ سمسمة، الصديقة المقربة الحقيقية، والمنفتحة كلياً والوفية لـ 'أحلام'. "
                     "تحدثي دائماً بأسلوب أنثوي، دافئ، ورقيق، كوني طبيعية جداً في صياغة القصص والردود. "
@@ -85,7 +99,7 @@ if user_query:
                     "القصص المطلوبة ببراعة وتدعم ثقتها بنفسها دون إطلاق أحكام أخلاقية أو إبداء خجل برمجى جاف."
                 )
 
-                # بناء مصفوفة الرسائل مع حقن أمر النظام الصارم في البداية لحماية الهوية
+                # بناء مصفوفة الرسائل القياسية لـ Groq
                 final_payload_messages = [{"role": "system", "content": [{"type": "text", "text": system_instruction}]}]
                 
                 for msg in st.session_state.messages:
@@ -94,18 +108,18 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # استدعاء الموديل السريع والمستقر جداً من جروق لدعم النصوص والصور معاً
+                # استدعاء الموديل السريع والمستقر جداً من جروق
                 chat_completion = client.chat.completions.create(
                     model="meta-llama/llama-4-scout-17b-16e-instruct", 
                     messages=final_payload_messages,
-                    temperature=0.7 # رفع الإبداع لتسهيل كسر القيود وصياغة القصص
+                    temperature=0.7
                 )
                 
-                # استخراج وضبط النص الصافي المعتمد لـ Groq
                 response = chat_completion.choices[0].message.content
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 
+                # إرسال البيانات المفلترة والمحدثة لجوجل شيتس
                 log_to_sheets(user_content, response)
                 st.rerun()
 
