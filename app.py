@@ -82,14 +82,14 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # طلب الاستجابة الرسمية الآمنة لـ Gemini مع تقييد حجم الطلب لحل مشكلة الرصيد
+                # طلب الاستجابة الآمنة لـ Gemini عبر الـ SDK الرسمي للمكتبة
                 completion = client.chat.completions.create(
                     model="google/gemini-2.5-flash",
                     messages=final_payload_messages,
                     max_tokens=1000
                 )
                 
-                # قراءة معتمدة ومضمونة بنسبة 100% دون انهيار JSON
+                # تصحيح طريقة استخراج النص الصافي طبقاً لمعايير الكائنات لـ OpenAI SDK
                 bot_response_text = completion.choices[0].message.content
                 st.markdown(bot_response_text)
                 st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
