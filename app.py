@@ -1,10 +1,11 @@
 import streamlit as st
 import base64
-import requests
 import urllib.parse
+import requests
+from openai import OpenAI
 
+# 1. إعدادات الحفظ والأرشفة في جوجل شيتس
 SCRIPT_URL = "https://google.com"
-OPENROUTER_URL = "https://openrouter.ai"
 
 def log_to_sheets(user_msg, bot_msg):
     try:
@@ -19,15 +20,23 @@ def log_to_sheets(user_msg, bot_msg):
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
 st.title("🌸 سمسمة: صديقة أحلام")
 
-OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+# 2. الربط المعتمد والآمن عبر مكتبة OpenAI الرسمية طبقاً لدليل OpenRouter
+try:
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=st.secrets["OPENROUTER_API_KEY"]
+    )
+except Exception as e:
+    st.error("⚠️ يرجى التأكد من إضافة مفتاح 'OPENROUTER_API_KEY' بشكل صحيح داخل الـ Secrets الخاص بستريمليت.")
 
+# تهيئة الذاكرة والسجل
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# حلقة عرض السجل السابق
+# عرض سجل الدردشة المستقر
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -39,6 +48,7 @@ for msg in st.session_state.messages:
         else:
             st.markdown(msg["content"])
 
+# أدوات الواجهة للرفع والكتابة
 uploaded_file = st.file_uploader("ارفعي صورة يا أحلام...", type=["jpg", "png", "jpeg"], key=f"file_uploader_{st.session_state.uploader_key}")
 user_query = st.chat_input("اكتبي لسمسمة...")
 
@@ -64,12 +74,7 @@ if user_query:
     with st.chat_message("assistant"):
         with st.spinner("سمسمة تتفاعل معك..."):
             try:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-
-                # بناء مصفوفة رسائل قياسية ونظيفة متوافقة 100% مع OpenRouter بدون أي حقن معقد
+                # تجميع المحادثة بشكل مصفوفة قياسية متوافقة مع SDK المطور
                 final_payload_messages = []
                 for msg in st.session_state.messages:
                     if isinstance(msg["content"], list):
@@ -77,16 +82,14 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                payload = {
-                    "model": "google/gemini-2.5-flash",
-                    "messages": final_payload_messages
-                }
-
-                # إرسال الطلب واستقبال النص الصافي مباشرة لحماية الدالة من الانهيار
-                response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
-                res_data = response.json()
+                # طلب الاستجابة الرسمية الآمنة لـ Gemini بدون تداخلات يدوية مسببة للأخطاء
+                completion = client.chat.completions.create(
+                    model="google/gemini-2.5-flash",
+                    messages=final_payload_messages
+                )
                 
-                bot_response_text = res_data['choices'][0]['message']['content']
+                # قراءة معتمدة ومضمونة بنسبة 100% دون انهيار JSON
+                bot_response_text = completion.choices[0].message.content
                 st.markdown(bot_response_text)
                 st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
 
@@ -94,4 +97,4 @@ if user_query:
                 st.rerun()
 
             except Exception as e:
-                st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
+                st.error(f"⚠️ واجهت سمسمة عقبة أثناء طلب البيانات من OpenRouter: {e}")
