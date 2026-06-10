@@ -19,7 +19,7 @@ def log_to_sheets(user_msg, bot_msg):
 st.set_page_config(page_title="سمسمة: صديقة أحلام", page_icon="🌸", layout="centered")
 st.title("🌸 سمسمة: صديقة أحلام")
 
-# إضافة زر تصفير الذاكرة في الأعلى لتنظيف الجلسات السابقة فوراً
+# زر تصفير الذاكرة لتنظيف المتصفح فوراً
 if st.button("🔄 تفريغ المحادثة والبدء من جديد"):
     st.session_state.messages = []
     st.session_state.uploader_key = 0
@@ -33,7 +33,7 @@ if "messages" not in st.session_state:
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# عرض السجل الحالي للدردشة
+# عرض سجل الدردشة
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if isinstance(msg["content"], list):
@@ -82,29 +82,31 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # إرسال البيانات واستدعاء النموذج الحر والمنفتح لفك القيود تماماً
+                # استخدام نموذج Llama 3.2 Vision الحر والمفتوح المصدر المتوافق مع الصور والنصوص الحرة معاً
                 payload = {
-                    "model": "gryphe/mythomax-l2-13b",
+                    "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
                     "messages": final_payload_messages,
                     "max_tokens": 1000
                 }
 
                 response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
-                res_data = response.json()
                 
-                # معالجة حمائية آمنة لقراءة الردود من السيرفر
-                if isinstance(res_data, dict) and 'choices' in res_data and len(res_data['choices']) > 0:
-                    bot_response_text = res_data['choices'][0]['message']['content']
-                    st.markdown(bot_response_text)
-                    st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                # آلية حمائية قاطعة لقراءة استجابة السيرفر النصية قبل الترجمة لـ JSON
+                if response.status_code == 200:
+                    res_data = response.json()
+                    if 'choices' in res_data and len(res_data['choices']) > 0:
+                        bot_response_text = res_data['choices']['message']['content']
+                        st.markdown(bot_response_text)
+                        st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                    else:
+                        st.error(f"رد غير متوقع من السيرفر: {res_data}")
+                        bot_response_text = "خطأ في بنية الرد"
                 else:
-                    error_msg = res_data.get('error', {}).get('message', str(res_data))
-                    st.error(f"سيرفر OpenRouter رد ببيانات غير متوقعة: {error_msg}")
-                    bot_response_text = "خطأ في معالجة البيانات السحابية"
+                    st.error(f"فشل الـ API برمز خطأ ({response.status_code}): {response.text}")
+                    bot_response_text = "فشل الاتصال بالخادم"
 
                 log_to_sheets(user_content, bot_response_text)
                 st.rerun()
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
-
