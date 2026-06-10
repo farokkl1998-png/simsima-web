@@ -90,28 +90,28 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # استدعاء الموديل الحر المتوافق مع الرؤية والدردشة غير المقيدة
+                # الانتقال للنموذج المجاني الأكثر استقراراً في تمرير الطلبات القياسية لـ OpenRouter
                 completion = client.chat.completions.create(
-                    model="meta-llama/llama-3.2-11b-vision-instruct:free",
+                    model="meta-llama/llama-3-8b-instruct:free",
                     messages=final_payload_messages,
                     max_tokens=300
                 )
                 
                 # التحقق الذكي لمنع قراءة صفحات الويب كـ نصوص ذكاء اصطناعي
                 if hasattr(completion, 'choices') and completion.choices:
-                    bot_response_text = completion.choices[0].message.content
+                    bot_response_text = completion.choices.message.content
                     st.markdown(bot_response_text)
                     st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
+                    log_to_sheets(user_content, bot_response_text)
+                    st.rerun()  # لا يتم التحديث إلا في حالة النجاح التام للرد
                 else:
-                    st.error(f"المفتاح مرفوض من سيرفر OpenRouter. يرجى إنشاء مفتاح جديد. الرد: {completion}")
-                    bot_response_text = "المفتاح غير صالح"
-
-                log_to_sheets(user_content, bot_response_text)
-                st.rerun()
+                    bot_response_text = str(completion)
+                    st.error(f"فشل الرد من السيرفر. محتوى الاستجابة الثابتة: {bot_response_text}")
 
             except Exception as e:
-                # إذا كانت الرسالة القادمة نصية طويلة (صفحة الويب)، سنطبع تحذيراً مفهوماً بدلاً من انهيار الواجهة
-                if "choices" in str(e):
-                    st.error("❌ تم رفض مفتاح الـ API من سيرفرات OpenRouter! يرجى إنشاء مفتاح جديد (Key) وضعه في الـ Secrets فوراً.")
+                # عزل رسالة الخطأ النصية الطويلة وطباعة تحذير مفهوم ثابت دون تحديث الصفحة
+                error_str = str(e)
+                if "choices" in error_str or "DOCTYPE" in error_str:
+                    st.error("❌ مفتاح الـ API الخاص بـ OpenRouter مرفوض تماماً أو انتهت صلاحيته! يرجى إنشاء مفتاح جديد (Create Key) وضعه في الـ Secrets فوراً.")
                 else:
                     st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك: {e}")
