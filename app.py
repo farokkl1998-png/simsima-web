@@ -23,7 +23,7 @@ st.title("🌸 سمسمة: صديقة أحلام")
 # 2. الربط المعتمد والآمن عبر مكتبة OpenAI الرسمية طبقاً لدليل OpenRouter
 try:
     client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
+        base_url="https://openrouter.ai",
         api_key=st.secrets["OPENROUTER_API_KEY"]
     )
 except Exception as e:
@@ -82,10 +82,11 @@ if user_query:
                     else:
                         final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
 
-                # طلب الاستجابة الرسمية الآمنة لـ Gemini بدون تداخلات يدوية مسببة للأخطاء
+                # طلب الاستجابة الرسمية الآمنة لـ Gemini مع تقييد حجم الطلب لحل مشكلة الرصيد
                 completion = client.chat.completions.create(
                     model="google/gemini-2.5-flash",
-                    messages=final_payload_messages
+                    messages=final_payload_messages,
+                    max_tokens=1000
                 )
                 
                 # قراءة معتمدة ومضمونة بنسبة 100% دون انهيار JSON
