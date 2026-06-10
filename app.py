@@ -83,7 +83,7 @@ if user_query:
                 headers = {
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:8501",
+                    "HTTP-Referer": "https://streamlit.io",
                     "X-Title": "Simsima App"
                 }
 
@@ -97,10 +97,9 @@ if user_query:
                         payload["image_url"] = f"data:image/jpeg;base64,{image_base64}"
 
                     response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
-                    res_data = response.json()
                     
-                    # قراءة رد الـ JSON الخاص بالصور بأمان تامي تبعاً لهيكلية أوبن راوتر
-                    if 'choices' in res_data and len(res_data['choices']) > 0:
+                    if response.status_code == 200:
+                        res_data = response.json()
                         generated_image_url = res_data['choices'][0]['message']['content']
                         st.image(generated_image_url, caption="تفضلي يا أحلام، صممتها لكِ بحرية كاملة! ✨")
                         bot_response_text = f"[صورة مولدة بحرية]: {generated_image_url}"
@@ -109,36 +108,45 @@ if user_query:
                             "content": [{"type": "text", "text": "تفضلي التعديل الحر للصورة الخاصة بكِ!"}, {"type": "image_url", "image_url": {"url": generated_image_url}}]
                         })
                     else:
-                        st.error(f"فشل توليد الصورة من السيرفر. الرد المستلم: {res_data}")
+                        st.error(f"خطأ من سيرفر الصور ({response.status_code}): {response.text}")
                         bot_response_text = "فشل في توليد الصورة"
                 else:
                     # --- مسار المحادثة والرؤية الحرة عبر Gemini ---
-                    final_payload_messages = [{"role": "system", "content": [{"type": "text", "text": SYSTEM_INSTRUCTION}]}]
+                    final_payload_messages = []
+                    
+                    # تعديل جوهري: دمج أمر النظام داخل هيكلية الرسائل بشكل متوافق تماماً مع حزمة OpenRouter لـ Gemini
                     for msg in st.session_state.messages:
                         if isinstance(msg["content"], list):
-                            final_payload_messages.append({"role": msg["role"], "content": msg["content"]})
+                            # إذا كانت مصفوفة تحتوي على صورة، ندمج التعليمات مع النص لحماية الشخصية والعبور الآمن
+                            updated_content = []
+                            for item in msg["content"]:
+                                if item["type"] == "text":
+                                    updated_content.append({"type": "text", "text": f"{SYSTEM_INSTRUCTION}\n\nسؤال المستخدم الحالي: {item['text']}"})
+                                else:
+                                    updated_content.append(item)
+                            final_payload_messages.append({"role": msg["role"], "content": updated_content})
                         else:
-                            final_payload_messages.append({"role": msg["role"], "content": [{"type": "text", "text": msg["content"]}]})
+                            # إذا كانت رسالة نصية عادية
+                            final_payload_messages.append({"role": msg["role"], "content": f"{SYSTEM_INSTRUCTION}\n\nسؤال المستخدم الحالي: {msg['content']}"})
 
                     payload = {
                         "model": "google/gemini-2.5-flash",
                         "messages": final_payload_messages
                     }
-                    response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
-                    res_data = response.json()
                     
-                    # إضافة الفهرس [0] لضمان استخراج النص بشكل صحيح 100% ودون أخطاء بقالب JSON
-                    if 'choices' in res_data and len(res_data['choices']) > 0:
+                    response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
+                    
+                    if response.status_code == 200:
+                        res_data = response.json()
                         bot_response_text = res_data['choices'][0]['message']['content']
                         st.markdown(bot_response_text)
                         st.session_state.messages.append({"role": "assistant", "content": bot_response_text})
                     else:
-                        st.error(f"واجه السيرفر مشكلة في إرسال الرد النصي. الرد: {res_data}")
-                        bot_response_text = "خطأ في الاتصال بنموذج النص"
+                        st.error(f"خطأ من سيرفر المحادثة ({response.status_code}): {response.text}")
+                        bot_response_text = "خطأ في رد السيرفر"
 
                 log_to_sheets(user_content, bot_response_text)
                 st.rerun()
 
             except Exception as e:
                 st.error(f"⚠️ واجهت سمسمة عقبة في معالجة طلبك الحر: {e}")
-
